@@ -2,11 +2,9 @@
  * SPDX-FileCopyrightText: 2024-2025 Aurora OSS
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-
 import { rateLimit } from "express-rate-limit"
 import { isEmpty } from "lodash"
 import { createStream } from "rotating-file-stream"
-
 import cors from "cors"
 import dayjs from "dayjs"
 import dotenv from "dotenv"
@@ -19,21 +17,16 @@ import morgan from "morgan"
 import path from "path"
 import pkg from "../package.json"
 import routes from "./routes"
-
 dotenv.config()
-
 export const blockedIps = fs
   .readFileSync(path.resolve("resources/blocked_ips.txt"), "utf8")
   .split("\n")
   .filter(Boolean)
-
 export const accounts = fs
   .readFileSync(path.resolve(`resources/accounts.txt`), "utf-8")
   .split("\n")
   .filter(Boolean)
-
 export const lruQueue = _.clone(accounts)
-
 function ascii(message: string, width: number = 80): string {
   return figlet.textSync(message, {
     font: "Standard",
@@ -43,17 +36,14 @@ function ascii(message: string, width: number = 80): string {
     whitespaceBreak: true
   })
 }
-
 const accessLogStream = createStream(() => dayjs().format("YYYY-MM-DD") + ".log", {
   interval: "1d",
   path: path.join(__dirname, "..", "logs", "access")
 })
-
 const blockedLogStream = createStream(() => dayjs().format("YYYY-MM-DD") + ".log", {
   interval: "1d",
   path: path.join(__dirname, "..", "logs", "blocked")
 })
-
 const rateLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutes
   limit: 5, // Allowed requests per window.
@@ -63,7 +53,6 @@ const rateLimiter = rateLimit({
   message: "Too many requests, try again later.",
   skip: (req) => !req.url.startsWith("/api/auth")
 })
-
 async function init() {
   const app = express()
   app.use(express.json())
@@ -73,25 +62,23 @@ async function init() {
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
     res.setHeader("Pragma", "no-cache")
     res.setHeader("Expires", "0")
-
     req.setTimeout(2 * 60000)
     res.setTimeout(2 * 60000)
-
     next()
   })
-
   // TODO: Improve it to avoid abuse by malicious users
   app.set("trust proxy", 1)
-
+  // Health check route for platform deploy checks (must come before
+  // IP-blocking/rate-limit middleware so it always responds).
+  app.get("/", (req, res) => {
+    res.status(200).send("OK")
+  })
   // Set up rate limiter
   app.use(rateLimiter)
-
   // Use helmet to secure Express with various HTTP headers
   app.use(helmet())
-
   // Add morgan for logging
   app.use(morgan("combined"))
-
   // Add morgan for file logging
   app.use(
     morgan("combined", {
@@ -99,7 +86,6 @@ async function init() {
       stream: accessLogStream
     })
   )
-
   // Add morgan for file logging
   app.use(
     morgan("combined", {
@@ -107,21 +93,16 @@ async function init() {
       stream: blockedLogStream
     })
   )
-
   // Block all flagged IPs
   app.use((req, res, next) => {
     const clientIp = req.ip || req.socket.remoteAddress || ""
-
     if (isEmpty(clientIp) || blockedIps.includes(clientIp)) {
-      return res.status(403)
+      return res.status(403).end()
     }
-
     next()
   })
-
   // Add custom routes
   app.use(routes)
-
   app.listen(8000, "0.0.0.0", () => {
     console.log("\n", ascii(pkg.name, 80), "\n")
     console.log('Server running on 0.0.0.0:8000');
@@ -129,18 +110,15 @@ async function init() {
     console.log("Available Accounts: ", accounts.length)
     console.log("Blocked IPs: ", blockedIps.length, "\n")
   })
-
   process.on("SIGINT", () => gracefullyExit())
   process.on("SIGTERM", () => gracefullyExit())
   process.on("uncaughtException", (error) => {
     console.error("Uncaught exception:", error)
   })
 }
-
 function gracefullyExit() {
   console.log()
   console.log(ascii("Bye!", 40))
   process.exit()
 }
-
 init()
