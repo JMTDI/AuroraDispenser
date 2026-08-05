@@ -122,8 +122,9 @@ async function init() {
   // Add custom routes
   app.use(routes)
 
-  app.listen(8000, "localhost", () => {
+  app.listen(8000, "0.0.0.0", () => {
     console.log("\n", ascii(pkg.name, 80), "\n")
+    console.log('Server running on 0.0.0.0:8000');
     console.log(`Version: ${pkg.version}`)
     console.log("Available Accounts: ", accounts.length)
     console.log("Blocked IPs: ", blockedIps.length, "\n")
